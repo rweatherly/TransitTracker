@@ -1,0 +1,3 @@
+skyfield>=1.49
+# Bundles the de421 ephemeris so no JPL download is needed (optional).
+skyfield-data>=6.0

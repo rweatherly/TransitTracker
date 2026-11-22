@@ -1,0 +1,12 @@
+# Observing site stays local; pass it on the command line or via env vars.
+location.json
+.env
+
+# Downloaded ephemeris and scratch output
+cache/
+*.bsp
+out/
+
+__pycache__/
+*.pyc
+.venv/
