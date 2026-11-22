@@ -1,0 +1,46 @@
+name: Fetch station TLEs
+
+on:
+  schedule:
+    - cron: "15 10 * * *"   # daily, 10:15 UTC (5:15 AM Eastern)
+  workflow_dispatch:        # lets you run it by hand from the Actions tab
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download ISS and Tiangong TLEs from CelesTrak
+        run: |
+          set -euo pipefail
+          mkdir -p data
+          : > data/stations.tle.new
+          for id in 25544 48274; do   # 25544 = ISS, 48274 = Tiangong (CSS)
+            curl -fsS --retry 3 --retry-delay 15 \
+              "https://celestrak.org/NORAD/elements/gp.php?CATNR=${id}&FORMAT=TLE" \
+              | tr -d '\r' | sed '/^[[:space:]]*$/d' > "data/${id}.tle"
+            # sanity checks: 3 lines, both element lines carry the catalog number
+            [ "$(wc -l < "data/${id}.tle")" -eq 3 ] || { echo "Bad TLE for ${id}"; cat "data/${id}.tle"; exit 1; }
+            grep -q "^1 ${id}U" "data/${id}.tle"
+            grep -q "^2 ${id} "  "data/${id}.tle"
+            cat "data/${id}.tle" >> data/stations.tle.new
+            rm "data/${id}.tle"
+          done
+          mv data/stations.tle.new data/stations.tle
+          cat data/stations.tle
+
+      - name: Commit if changed
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898729+github-actions[bot]@users.noreply.github.com"
+          git add data/stations.tle
+          if git diff --cached --quiet; then
+            echo "No change"
+          else
+            git commit -m "TLE update $(date -u +%Y-%m-%dT%H:%MZ)"
+            git push
+          fi
