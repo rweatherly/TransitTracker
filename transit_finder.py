@@ -147,9 +147,19 @@ class Event:
     station_az_deg: float
     station_range_km: float
     body_alt_deg: float
+    body_az_deg: float
+    direction: str            # compass direction of the event, e.g. "SE"
+    low: bool                 # under --low-alt: may be hidden by trees/houses
     offset_km: float          # how far the site sits from the path centerline
     path_halfwidth_km: float  # half-width of the ground strip that sees a transit
     tle_age_days: float
+
+
+COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+
+
+def compass(az_deg: float) -> str:
+    return COMPASS[int(((az_deg % 360) + 22.5) // 45) % 8]
 
 
 def angular_sep(alt1, az1, alt2, az2):
@@ -165,7 +175,7 @@ def geometry(ts, observer, obs_at, sat, body, body_radius_km, jd):
     b_alt, b_az, b_dist = obs_at.at(t).observe(body).apparent().altaz()
     sep = angular_sep(s_alt.radians, s_az.radians, b_alt.radians, b_az.radians)
     radius = np.arcsin(body_radius_km / b_dist.km)
-    return sep, radius, s_alt, s_az, s_dist, b_alt
+    return sep, radius, s_alt, s_az, s_dist, b_alt, b_az
 
 
 def find_passes(ts, sat, observer, t0, t1, min_alt):
@@ -215,14 +225,14 @@ def scan(args, lat, lon, elev, tles, now_utc):
 
                 n = max(3, int((set_ - rise) * 86400 / COARSE_STEP_S) + 1)
                 jd = np.linspace(rise, set_, n)
-                sep, _, _, _, _, _ = geometry(ts, observer, obs_at, sat, body, body_r, jd)
+                sep, *_ = geometry(ts, observer, obs_at, sat, body, body_r, jd)
                 k = int(np.argmin(sep))
 
                 lo = jd[max(k - 1, 0)]
                 hi = jd[min(k + 1, n - 1)]
                 m = max(3, int((hi - lo) * 86400 / FINE_STEP_S) + 1)
                 jd_f = np.linspace(lo, hi, m)
-                sep_f, rad_f, s_alt, s_az, s_dist, b_alt = geometry(
+                sep_f, rad_f, s_alt, s_az, s_dist, b_alt, b_az = geometry(
                     ts, observer, obs_at, sat, body, body_r, jd_f)
                 j = int(np.argmin(sep_f))
 
@@ -265,6 +275,9 @@ def scan(args, lat, lon, elev, tles, now_utc):
                     station_az_deg=round(float(s_az.degrees[j]), 1),
                     station_range_km=round(rng),
                     body_alt_deg=round(float(b_alt.degrees[j]), 1),
+                    body_az_deg=round(float(b_az.degrees[j]), 1),
+                    direction=compass(float(b_az.degrees[j])),
+                    low=bool(b_alt.degrees[j] < args.low_alt),
                     offset_km=round(rng * min_sep / sin_alt, 2),
                     path_halfwidth_km=round(rng * radius / sin_alt, 2),
                     tle_age_days=round(float(tle_age), 2),
@@ -286,7 +299,8 @@ def print_text(events, tle_source, args, now_utc, tle_age=None):
     for e in events:
         tag = "TRANSIT " if e.kind == "transit" else "POSSIBLE"
         line = (f"{tag} {e.station} across the {e.body}: {e.time_local} "
-                f"({e.days_out} d out), body alt {e.body_alt_deg} deg, "
+                f"({e.days_out} d out), {e.body} {e.body_alt_deg} deg up in the "
+                f"{e.direction}{' (LOW, may be blocked)' if e.low else ''}, "
                 f"station range {e.station_range_km} km")
         if e.kind == "transit":
             line += (f", {e.duration_s} s in disc, site {e.offset_km} km off "
@@ -306,8 +320,10 @@ def main(argv=None):
     p.add_argument("--location-file", default=str(HERE / "location.json"))
     p.add_argument("--tle", help="TLE file to use instead of data/stations.tle")
     p.add_argument("--days", type=float, default=14)
-    p.add_argument("--min-alt", type=float, default=5.0,
-                   help="minimum Sun/Moon altitude, degrees (default 5)")
+    p.add_argument("--min-alt", type=float, default=10.0,
+                   help="skip events with the Sun/Moon below this, degrees (default 10)")
+    p.add_argument("--low-alt", type=float, default=20.0,
+                   help="mark events below this as low/hard to see, degrees (default 20)")
     p.add_argument("--bodies", nargs="+", default=["sun", "moon"],
                    choices=["sun", "moon"])
     p.add_argument("--possible-after-days", type=float, default=3.0,

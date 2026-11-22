@@ -39,7 +39,8 @@ de421 into `cache/` on first run.
 | Option | Default | Meaning |
 | --- | --- | --- |
 | `--days` | 14 | how far ahead to scan |
-| `--min-alt` | 5 | minimum Sun/Moon altitude in degrees |
+| `--min-alt` | 10 | skip events with the Sun/Moon below this altitude |
+| `--low-alt` | 20 | mark events below this altitude as `low` (may be blocked) |
 | `--bodies` | sun moon | which discs to check |
 | `--possible-after-days` | 3 | flag near misses only this far out or more |
 | `--possible-margin` | 1.0 | near-miss window, in disc radii past the limb |
@@ -48,6 +49,10 @@ de421 into `cache/` on first run.
 | `--json` | off | machine-readable output |
 
 ## Output fields
+
+`direction` is the compass point of the event and `low` is true when the Sun or
+Moon is under `--low-alt`, so a low event can be judged against the local
+horizon.
 
 `offset_km` is roughly how far the site sits from the transit centerline, and
 `path_halfwidth_km` is half the width of the ground strip that sees a transit.
